@@ -95,6 +95,7 @@ void GeneralPane::OnEmulationStateChanged(Core::State state)
 void GeneralPane::ConnectLayout()
 {
   connect(m_checkbox_dualcore, &QCheckBox::toggled, this, &GeneralPane::OnSaveConfig);
+  connect(m_checkbox_enable_replays, &QCheckBox::toggled, this, &GeneralPane::OnSaveConfig);
   connect(m_checkbox_cheats, &QCheckBox::toggled, this, &GeneralPane::OnSaveConfig);
   connect(m_checkbox_override_region_settings, &QCheckBox::stateChanged, this,
           &GeneralPane::OnSaveConfig);

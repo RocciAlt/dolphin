@@ -64,6 +64,7 @@
 #define REDUMPCACHE_DIR "Redump"
 #define SHADERCACHE_DIR "Shaders"
 #define STATESAVES_DIR "StateSaves"
+#define SPOOKY_REPLAYS_DIR "Spooky Replays"
 #define SCREENSHOTS_DIR "ScreenShots"
 #define LOAD_DIR "Load"
 #define HIRES_TEXTURES_DIR "Textures"

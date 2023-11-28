@@ -36,6 +36,12 @@ void HLE_GeneralDebugPrint(const Core::CPUThreadGuard& guard, ParameterType para
 void HLE_LogDPrint(const Core::CPUThreadGuard& guard, ParameterType parameter_type);
 void HLE_LogFPrint(const Core::CPUThreadGuard& guard, ParameterType parameter_type);
 
+// these are meant to reduce noise in the dolphin log file, and should be set to false when not trying to isolate an issue
+bool ignoreWPADsampling = true;
+bool ignoreRpcController = true;
+bool ignoreGameEvents = true;
+bool ignoreSoundEvents = true; 
+
 void HLE_OSPanic(const Core::CPUThreadGuard& guard)
 {
   auto& system = Core::System::GetInstance();
@@ -93,6 +99,23 @@ void HLE_GeneralDebugPrint(const Core::CPUThreadGuard& guard, ParameterType para
   }
 
   StringPopBackIf(&report_message, '\n');
+
+  std::string report_msg = SHIFTJISToUTF8(report_message);
+  if (ignoreWPADsampling &&
+      (report_msg == "WPADSetSamplingCallback()" || report_msg == "handle = 0, repid = 18"))
+    return;
+  if (ignoreRpcController && (report_msg.starts_with("RpcController: unknown") ||
+                              report_message.starts_with("Local slider value")))
+    return;
+  if (ignoreSoundEvents &&
+      (report_msg.starts_with("XSoundCueHandle::") || report_msg == "Slider name: unknown"))
+    return;
+  if (ignoreGameEvents)
+  {
+    if (report_msg.starts_with("AIBall Contact") || report_msg.starts_with("Ball Contact") ||
+        report_msg.starts_with("Ball contact") || report_msg.starts_with("PhysChar Contact"))
+      return;
+  }
 
   NOTICE_LOG_FMT(OSREPORT_HLE, "{:08x}->{:08x}| {}", LR(ppc_state), ppc_state.pc,
                  SHIFTJISToUTF8(report_message));

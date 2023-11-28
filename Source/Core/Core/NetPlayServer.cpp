@@ -432,9 +432,35 @@ static void SendSyncIdentifier(sf::Packet& spac, const SyncIdentifier& sync_iden
 // called from ---NETPLAY--- thread
 ConnectionError NetPlayServer::OnConnect(ENetPeer* incoming_connection, sf::Packet& received_packet)
 {
-  std::string netplay_version;
-  received_packet >> netplay_version;
-  if (netplay_version != Common::GetScmRevGitStr())
+  std::string client_version;
+  received_packet >> client_version;
+
+  std::string client_version_num[3] = {"", "", ""};
+  std::string server_version_num[3] = {"", "", ""};
+
+  std::istringstream f(client_version);
+  std::string s;
+
+  int i = 0;
+  while (std::getline(f, s, '.'))
+  {
+    client_version_num[i] = s;
+    i++;
+  }
+
+  i = 0;
+  std::istringstream g(Common::GetSpookyRevStr());
+  while (std::getline(g, s, '.'))
+  {
+    server_version_num[i] = s;
+    i++;
+  }
+
+  bool majorMatch = client_version_num[0] == server_version_num[0];
+  bool minorMatch = client_version_num[1] == server_version_num[1];
+
+  // throw version mismatch if the major or minor don't match (i don't care about rev)
+  if (!(majorMatch && minorMatch))
     return ConnectionError::VersionMismatch;
 
   if (m_is_running || m_start_pending)
@@ -2222,7 +2248,7 @@ bool NetPlayServer::PlayerHasControllerMapped(const PlayerId pid) const
 
 void NetPlayServer::AssignNewUserAPad(const Client& player)
 {
-  for (PlayerId& mapping : m_pad_map)
+  for (PlayerId& mapping : m_wiimote_map)
   {
     // 0 means unmapped
     if (mapping == 0)

@@ -28,6 +28,8 @@ static T HostRead(const Core::CPUThreadGuard& guard, u32 address);
 template <typename T>
 static void HostWrite(const Core::CPUThreadGuard& guard, T var, u32 address);
 
+bool showBreakPointConditionHitLog = true;
+
 template <>
 u8 HostRead(const Core::CPUThreadGuard& guard, u32 address)
 {
@@ -337,8 +339,11 @@ void Expression::Reporting(const double result) const
     Core::DisplayMessage("Breakpoint condition has encountered a NaN.", 2000);
   }
 
-  if (result != 0.0 || is_nan)
-    NOTICE_LOG_FMT(MEMMAP, "Breakpoint condition returned: {}. Vars:{}", result, message);
+  if (showBreakPointConditionHitLog)
+  {
+    if (result != 0.0 || is_nan)
+      NOTICE_LOG_FMT(MEMMAP, "Breakpoint condition returned: {}. Vars:{}", result, message);
+  }
 }
 
 std::string Expression::GetText() const

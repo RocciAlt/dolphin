@@ -50,6 +50,8 @@
 
 #include "VideoCommon/VideoBackendBase.h"
 
+#include "Core/PowerPC/PPCSymbolDB.h"
+
 namespace PowerPC
 {
 MMU::MMU(Core::System& system, Memory::MemoryManager& memory, PowerPC::PowerPCManager& power_pc)
@@ -1270,8 +1272,8 @@ void MMU::GenerateDSIException(u32 effective_address, bool write)
   // DSI exceptions are only supported in MMU mode.
   if (!m_system.IsMMUMode())
   {
-    PanicAlertFmt("Invalid {} {:#010x}, PC = {:#010x}", write ? "write to" : "read from",
-                  effective_address, m_ppc_state.pc);
+    PanicAlertFmt("Invalid {} {:#010x}, Symbol = {}, PC = {:#010x}", write ? "write to" : "read from",
+                  effective_address, g_symbolDB.GetDescription(m_ppc_state.pc), m_ppc_state.pc);
     if (m_system.IsPauseOnPanicMode())
     {
       m_system.GetCPU().Break();

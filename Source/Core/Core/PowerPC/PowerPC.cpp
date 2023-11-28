@@ -663,12 +663,19 @@ void PowerPCManager::CheckBreakPoints()
   if (bp->log_on_hit)
   {
     NOTICE_LOG_FMT(MEMMAP,
-                   "BP {:08x} {}({:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} "
-                   "{:08x}) LR={:08x}",
-                   m_ppc_state.pc, g_symbolDB.GetDescription(m_ppc_state.pc), m_ppc_state.gpr[3],
+                   "BP {:08x} {}({:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} "
+                   "{:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} "
+                   "{:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} "
+                   "{:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x} {:08x}) LR={:08x}",
+                   m_ppc_state.pc, g_symbolDB.GetDescription(m_ppc_state.pc),
+                   m_ppc_state.gpr[0], m_ppc_state.gpr[1], m_ppc_state.gpr[2], m_ppc_state.gpr[3],
                    m_ppc_state.gpr[4], m_ppc_state.gpr[5], m_ppc_state.gpr[6], m_ppc_state.gpr[7],
                    m_ppc_state.gpr[8], m_ppc_state.gpr[9], m_ppc_state.gpr[10], m_ppc_state.gpr[11],
-                   m_ppc_state.gpr[12], LR(m_ppc_state));
+                   m_ppc_state.gpr[12], m_ppc_state.gpr[13], m_ppc_state.gpr[14], m_ppc_state.gpr[15],
+                   m_ppc_state.gpr[16], m_ppc_state.gpr[17], m_ppc_state.gpr[18], m_ppc_state.gpr[19],
+                   m_ppc_state.gpr[20], m_ppc_state.gpr[21], m_ppc_state.gpr[22], m_ppc_state.gpr[23],
+                   m_ppc_state.gpr[24], m_ppc_state.gpr[25], m_ppc_state.gpr[26], m_ppc_state.gpr[27],
+                   m_ppc_state.gpr[28], m_ppc_state.gpr[29], m_ppc_state.gpr[30], m_ppc_state.gpr[31], LR(m_ppc_state));
   }
   if (m_breakpoints.IsTempBreakPoint(m_ppc_state.pc))
     m_breakpoints.Remove(m_ppc_state.pc);

@@ -1057,6 +1057,12 @@ void CodeViewWidget::keyPressEvent(QKeyEvent* event)
     return;
   default:
     QWidget::keyPressEvent(event);
+    if (event->key() == Qt::Key_Space)
+    {
+      m_context_address = m_address;
+      ToggleBreakpoint();
+      Update();
+    }
     break;
   }
 }
