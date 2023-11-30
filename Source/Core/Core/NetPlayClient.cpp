@@ -76,6 +76,8 @@
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/VideoConfig.h"
 
+#include <Core/StateAuxillary.h>
+
 namespace NetPlay
 {
 using namespace WiimoteCommon;
@@ -1761,7 +1763,7 @@ bool NetPlayClient::StartGame(const std::string& path)
 
   m_first_pad_status_received.fill(false);
 
-  if (m_dialog->IsRecording())
+  if (false && m_dialog->IsRecording())
   {
     if (Movie::IsReadOnly())
       Movie::SetReadOnly(false);
@@ -1779,6 +1781,15 @@ bool NetPlayClient::StartGame(const std::string& path)
       wiimotes[i] = m_wiimote_map[i] > 0;
     }
     Movie::BeginRecordingInput(controllers, wiimotes);
+  }
+  else
+  {
+    // rocci todo
+    StateAuxillary::setNetPlayControllers(m_wiimote_map, m_pid);
+    // Metadata::setPlayerArray(GetPlayers());
+    // Metadata::setNetPlayControllers(m_pad_map);
+    //  StatViewer::setNetPlayControllersAndPlayers(m_pad_map, GetPlayers());
+    //  Metadata::setPlayerName(NetPlayClient::m_player_name);
   }
 
   for (unsigned int i = 0; i < 4; ++i)

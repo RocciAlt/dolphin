@@ -52,6 +52,8 @@
 
 #include "VideoCommon/VideoBackendBase.h"
 
+#include "Core/StateAuxillary.h"
+
 namespace BootManager
 {
 // Boot the ISO or file
@@ -64,6 +66,10 @@ bool BootCore(std::unique_ptr<BootParameters> boot, const WindowSystemInfo& wsi)
 
   if (!StartUp.SetPathsAndGameMetadata(*boot))
     return false;
+
+  StateAuxillary::setBoolMatchStart(false);
+  StateAuxillary::setBoolMatchEnd(false);
+  StateAuxillary::setBoolWroteCodes(false);
 
   // Movie settings
   if (Movie::IsPlayingInput() && Movie::IsConfigSaved())

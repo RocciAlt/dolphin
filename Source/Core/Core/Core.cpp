@@ -94,6 +94,16 @@
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoEvents.h"
 
+#include "Core/StateAuxillary.h"
+//#include "Core/DefaultGeckoCodes.h"
+#include <thread>
+#include <ctime>
+#include "Core/HW/Memmap.h"
+#include "Core/Config/WiimoteSettings.h"
+#include <Core/HW/SI/SI_Device.h>
+#include <codecvt>
+
+
 #ifdef ANDROID
 #include "jni/AndroidCommon/IDCache.h"
 #endif
@@ -115,6 +125,11 @@ static bool s_is_throttler_temp_disabled = false;
 static std::atomic<double> s_last_actual_emulation_speed{1.0};
 static bool s_frame_step = false;
 static std::atomic<bool> s_stop_frame_step;
+
+// custom bools
+static bool boolMatchStart = false;
+static bool boolMatchEnd = false;
+static bool wroteCodes = false;
 
 #ifdef USE_MEMORYWATCHER
 static std::unique_ptr<MemoryWatcher> s_memory_watcher;
@@ -178,6 +193,58 @@ void OnFrameEnd()
     s_memory_watcher->Step(guard);
   }
 #endif
+
+  if (!StateAuxillary::getBoolWroteCodes() && !Movie::IsPlayingInput())
+  {
+    bool netplayMode = NetPlay::IsNetPlayRunning();
+
+    // this is the new way to get data in mem, completely untested
+    auto& system = Core::System::GetInstance();
+    auto& memory = system.GetMemory();
+
+    static const u32 matchStatus = 0x800002FF;
+    static const int matchStarted = 1;
+    static const int matchStopped = 0;
+
+    // match start
+    if (memory.Read_U8(matchStatus) == matchStarted && !StateAuxillary::getBoolMatchStart() &&
+        !Movie::IsPlayingInput() &&
+        !Movie::IsRecordingInput() && /* !StateAuxillary::isSpectator() && */
+        Config::Get(Config::MAIN_REPLAYS_NETPLAY) && netplayMode)
+    {
+      boolMatchStart = true;
+      StateAuxillary::setBoolMatchStart(true);
+      // begin recording
+
+      StateAuxillary::startRecording();
+      StateAuxillary::setBoolMatchEnd(false);
+      boolMatchEnd = false;
+
+      // direcotry gets created from UICommon.cpp now
+    }
+
+    // match end
+    if (memory.Read_U8(matchStatus) == matchStopped && !StateAuxillary::getBoolMatchEnd() &&
+        !Movie::IsPlayingInput() && Movie::IsRecordingInput() &&
+        netplayMode)  // isRecordingInput is set to false here, not sure why
+    {
+      StateAuxillary::setBoolMatchEnd(true);
+      boolMatchEnd = true;
+      time_t curr_time;
+      tm* curr_tm;
+      char date_string[100];
+
+      time(&curr_time);
+      curr_tm = localtime(&curr_time);
+      strftime(date_string, 50, "%B_%d_%Y_%OH_%OM_%OS", curr_tm);
+
+      std::string uiFileName = File::GetUserPath(D_SPOOKYREPLAYS_IDX) + "output.dtm";
+
+      StateAuxillary::stopRecording(uiFileName, curr_tm);
+      StateAuxillary::setBoolMatchStart(false);
+      boolMatchStart = false;
+    }
+  }
 }
 
 // Display messages and return values

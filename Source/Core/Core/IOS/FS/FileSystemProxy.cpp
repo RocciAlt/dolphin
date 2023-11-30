@@ -19,6 +19,8 @@
 #include "Core/IOS/Uids.h"
 #include "Core/System.h"
 
+#include "Core/PowerPC/PowerPC.h"
+
 namespace IOS::HLE
 {
 using namespace IOS::HLE::FS;
@@ -115,12 +117,15 @@ void FSDevice::DoState(PointerWrap& p)
 template <typename... Args>
 static void LogResult(ResultCode code, fmt::format_string<Args...> format, Args&&... args)
 {
+  auto& system = Core::System::GetInstance();
+  auto& ppc_state = system.GetPPCState();
+
   const std::string command = fmt::format(format, std::forward<Args>(args)...);
   const auto type =
       code == ResultCode::Success ? Common::Log::LogLevel::LINFO : Common::Log::LogLevel::LERROR;
 
-  GENERIC_LOG_FMT(Common::Log::LogType::IOS_FS, type, "Command: {}: Result {}", command,
-                  Common::ToUnderlying(ConvertResult(code)));
+  GENERIC_LOG_FMT(Common::Log::LogType::IOS_FS, type, "{:08x}->{:08x} Command: {}: Result {}",
+                  ppc_state.spr[SPR_LR], ppc_state.pc, command, Common::ToUnderlying(ConvertResult(code)));
 }
 
 template <typename T, typename... Args>

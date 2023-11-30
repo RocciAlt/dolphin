@@ -73,6 +73,15 @@
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoConfig.h"
 
+#include <filesystem> // C++17
+#include <iostream>
+#include "unzip.h"
+#include <direct.h>
+#include "Core/StateAuxillary.h"
+#include <Core/Metadata.h>
+namespace fs = std::filesystem;
+
+
 // The chunk to allocate movie data in multiples of.
 #define DTM_BASE_LENGTH (1024)
 
@@ -954,13 +963,152 @@ void ReadHeader()
   s_MD5 = tmpHeader.md5;
   s_DSPiromHash = tmpHeader.DSPiromHash;
   s_DSPcoefHash = tmpHeader.DSPcoefHash;
+
+  for (int i = 0; i < 4; i++)
+  {
+    Config::SetBaseOrCurrent(Config::GetInfoForSIDevice(static_cast<int>(i)),
+                             SerialInterface::SIDevices(tmpHeader.reserved2[i + 4]));
+  }
+  SConfig::GetInstance().SaveSettings();
 }
+
+#define dir_delimiter '/'
+#define MAX_FILENAME 512
+#define READ_SIZE 8192
 
 // NOTE: Host Thread
 bool PlayInput(const std::string& movie_path, std::optional<std::string>* savestate_path)
 {
+  // we're going to set controllers on/off about 50 lines after this, so we need to
+  // get the user's current ports so that we can set it back after the movie is closed out of
+  const SerialInterface::SIDevices currentDevice0 =
+      Config::Get(Config::GetInfoForSIDevice(static_cast<int>(0)));
+  const SerialInterface::SIDevices currentDevice1 =
+      Config::Get(Config::GetInfoForSIDevice(static_cast<int>(1)));
+  const SerialInterface::SIDevices currentDevice2 =
+      Config::Get(Config::GetInfoForSIDevice(static_cast<int>(2)));
+  const SerialInterface::SIDevices currentDevice3 =
+      Config::Get(Config::GetInfoForSIDevice(static_cast<int>(3)));
+  StateAuxillary::setPrePort(currentDevice0, currentDevice1, currentDevice2, currentDevice3);
+
+  // movie_path is a const and trying to change that breaks a lot of things
+  std::string actual_movie_path = movie_path;
+
   if (s_playMode != PlayMode::None)
     return false;
+
+    // check if it's a citrus playback file
+  fs::path temp_movie_path = movie_path;
+  if (temp_movie_path.extension() == ".boo")
+  {
+    // unzip and store the cit file path to movie_path
+    unzFile zipfile = unzOpen(movie_path.c_str());
+    if (zipfile == NULL)
+    {
+      printf("not found");
+    }
+
+    // Get info about the zip file
+    unz_global_info global_info;
+    if (unzGetGlobalInfo(zipfile, &global_info) != UNZ_OK)
+    {
+      printf("could not read file global info\n");
+      unzClose(zipfile);
+    }
+
+    // Buffer to hold data read from the zip file.
+    char read_buffer[READ_SIZE];
+
+    // Loop to extract all files
+    float i;
+    for (i = 0; i < global_info.number_entry; ++i)
+    {
+      // Get info about current file.
+      unz_file_info file_info;
+      char filename[MAX_FILENAME];
+      if (unzGetCurrentFileInfo(zipfile, &file_info, filename, MAX_FILENAME, NULL, 0, NULL, 0) !=
+          UNZ_OK)
+      {
+        printf("could not read file info\n");
+        unzClose(zipfile);
+      }
+
+      // Check if this entry is a directory or file.
+      const size_t filename_length = strlen(filename);
+      if (filename[filename_length - 1] == dir_delimiter)
+      {
+        // Entry is a directory, so create it.
+        printf("dir:%s\n", filename);
+        _mkdir(filename);
+      }
+      else
+      {
+        // Entry is a file, so extract it.
+        printf("file:%s\n", filename);
+
+        // check if this is our movie (dtm file). if it is we need to make that our movie path
+        fs::path foundDTMFile = filename;
+        fs::path directory = fs::path(movie_path).parent_path();
+        directory /= filename;
+        std::string extractHere = directory.string();
+        if (foundDTMFile.extension() == ".dtm")
+        {
+          // fs::path directory{movie_path};
+          // std::string path_of_movie_path_string{path_of_movie_path.string()};
+
+          actual_movie_path = directory.string();
+        }
+        if (unzOpenCurrentFile(zipfile) != UNZ_OK)
+        {
+          printf("could not open file\n");
+          unzClose(zipfile);
+        }
+
+        // Open a file to write out the data.
+        FILE* out = fopen(extractHere.c_str(), "wb");
+        if (out == NULL)
+        {
+          printf("could not open destination file\n");
+          unzCloseCurrentFile(zipfile);
+          unzClose(zipfile);
+        }
+
+        int error = UNZ_OK;
+        do
+        {
+          error = unzReadCurrentFile(zipfile, read_buffer, READ_SIZE);
+          if (error < 0)
+          {
+            printf("error %d\n", error);
+            unzCloseCurrentFile(zipfile);
+            unzClose(zipfile);
+          }
+
+          // Write data to file.
+          if (error > 0)
+          {
+            fwrite(read_buffer, error, 1, out);  // You should check return of fwrite...
+          }
+        } while (error > 0);
+
+        fclose(out);
+      }
+
+      unzCloseCurrentFile(zipfile);
+
+      // Go the the next entry listed in the zip file.
+      if ((i + 1) < global_info.number_entry)
+      {
+        if (unzGoToNextFile(zipfile) != UNZ_OK)
+        {
+          printf("cound not read next file\n");
+          unzClose(zipfile);
+        }
+      }
+    }
+
+    unzClose(zipfile);
+  }
 
   File::IOFile recording_file(movie_path, "rb");
   if (!recording_file.ReadArray(&tmpHeader, 1))
@@ -996,20 +1144,23 @@ bool PlayInput(const std::string& movie_path, std::optional<std::string>* savest
   // Load savestate (and skip to frame data)
   if (tmpHeader.bFromSaveState && savestate_path)
   {
-    const std::string savestate_path_temp = movie_path + ".sav";
+    const std::string savestate_path_temp = actual_movie_path + ".sav";
     if (File::Exists(savestate_path_temp))
     {
       *savestate_path = savestate_path_temp;
     }
     else
     {
+      // TODO: i need to test, but i don't think i want this
+      /*
       PanicAlertFmtT("Movie {0} indicates that it starts from a savestate, but {1} doesn't exist. "
                      "The movie will likely not sync!",
-                     movie_path, savestate_path_temp);
+                     actual_movie_path, savestate_path_temp);
+      */
     }
 
     s_bRecordingFromSaveState = true;
-    Movie::LoadInput(movie_path);
+    Movie::LoadInput(actual_movie_path);
   }
 
   return true;
@@ -1201,6 +1352,10 @@ static void CheckInputEnd()
        !IsRecordingInputFromSaveState()))
   {
     EndPlayInput(!s_bReadOnly);
+
+    std::thread t1(&StateAuxillary::endPlayback);
+    t1.detach();
+    StateAuxillary::setPostPort();
   }
 }
 
@@ -1279,8 +1434,12 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
       auto& system = Core::System::GetInstance();
       if (!system.GetDVDInterface().AutoChangeDisc())
       {
+        // TODO check if this continues to cause issues
+        /*
+        // rocci i don't know what this means, but it's causing issues
         system.GetCPU().Break();
         PanicAlertFmtT("Change the disc to {0}", s_discChange);
+        */
       }
     });
   }
@@ -1366,6 +1525,12 @@ void EndPlayInput(bool cont)
       cpu.Break();
     s_rerecords = 0;
     s_currentByte = 0;
+
+    if (s_playMode == PlayMode::Playing)
+    {
+      StateAuxillary::setPostPort();
+    }
+
     s_playMode = PlayMode::None;
     Core::DisplayMessage("Movie End.", 2000);
     s_bRecordingFromSaveState = false;
@@ -1426,6 +1591,53 @@ void SaveRecording(const std::string& filename)
   header.DSPiromHash = s_DSPiromHash;
   header.DSPcoefHash = s_DSPcoefHash;
   header.tickCount = s_totalTickCount;
+
+  std::array<u8, 11> s_ourPortInfo;
+  s_ourPortInfo.fill(0);
+  int portCounter = 0;
+  if (NetPlay::IsNetPlayRunning())
+  {
+    std::vector<int> ourNetPlayPorts = StateAuxillary::getOurNetPlayPorts();
+    for (int i = 0; i < 4; i++)
+    {
+      int portValue = ourNetPlayPorts.at(i);
+      s_ourPortInfo[i] = portValue;
+      if (portValue)
+      {
+        // we need to know what kind of controller they were using for playback purposes
+        // netplay uses your si device from port 1 (index 0) so we need to use a counter that tracks
+        // how many ports we've used
+        const SerialInterface::SIDevices currentDevice =
+            Config::Get(Config::GetInfoForSIDevice(static_cast<int>(portCounter)));
+        s_ourPortInfo[i + 4] = currentDevice;
+        portCounter++;
+      }
+      else
+      {
+        s_ourPortInfo[i + 4] = 0;
+      }
+    }
+    header.reserved2 = s_ourPortInfo;
+  }
+  else
+  {
+    for (int i = 0; i < 4; i++)
+    {
+      if (IsUsingPad(i))
+      {
+        s_ourPortInfo[i] = 1;
+        const SerialInterface::SIDevices currentDevice =
+            Config::Get(Config::GetInfoForSIDevice(static_cast<int>(i)));
+        s_ourPortInfo[i + 4] = currentDevice;
+      }
+      else
+      {
+        s_ourPortInfo[i] = 0;
+        s_ourPortInfo[i + 4] = 0;
+      }
+    }
+    header.reserved2 = s_ourPortInfo;
+  }
 
   // TODO
   header.uniqueID = 0;
@@ -1559,6 +1771,8 @@ static void CheckMD5()
     Core::DisplayMessage("Checksum of current game matches the recorded game.", 2000);
   else
     Core::DisplayMessage("Checksum of current game does not match the recorded game!", 3000);
+
+  Metadata::setMD5(s_MD5);
 }
 
 // NOTE: Entrypoint for own thread
@@ -1577,5 +1791,11 @@ void Shutdown()
 {
   s_currentInputCount = s_totalInputCount = s_totalFrames = s_tickCountAtLastInput = 0;
   s_temp_input.clear();
+
+  // shutdown is called any time the game (core) is closed
+  // delete any residue from shutting down a playback early that wasn't handled from graceful movie
+  // end
+  std::thread t1(&StateAuxillary::endPlayback);
+  t1.detach();
 }
 }  // namespace Movie

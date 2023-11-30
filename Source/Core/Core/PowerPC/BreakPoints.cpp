@@ -120,7 +120,7 @@ void BreakPoints::Add(TBreakPoint bp)
 
 void BreakPoints::Add(u32 address, bool temp)
 {
-  BreakPoints::Add(address, temp, true, false, std::nullopt);
+  BreakPoints::Add(address, temp, false, true, std::nullopt);
 }
 
 void BreakPoints::Add(u32 address, bool temp, bool break_on_hit, bool log_on_hit,
